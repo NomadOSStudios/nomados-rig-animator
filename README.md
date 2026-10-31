@@ -18,7 +18,7 @@ survivors-like, by one developer working with Claude.
 Requirements: Python 3 and a modern browser. No build step, no npm.
 
 ```bash
-git clone https://github.com/emadgaidi/nomados-rig-animator.git
+git clone https://github.com/NomadOSStudios/nomados-rig-animator.git
 cd nomados-rig-animator
 python3 server.py
 ```
