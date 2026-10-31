@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NomadOS Rig Animator</title>
+<style>
+  :root {
+    --bg: #16181d; --panel: #1f2229; --border: #2e323b;
+    --text: #e8eaed; --dim: #9aa0a6; --accent: #9ece6a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh; display: flex; flex-direction: column;
+    background: var(--bg); color: var(--text);
+    font: 13px/1.4 -apple-system, "Segoe UI", sans-serif;
+    user-select: none;
+  }
+  #topbar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  #topbar h1 { font-size: 14px; margin: 0 8px 0 0; }
+  #topbar h1 span { color: var(--accent); }
+  #projsave.dirty {
+    border-color: #e0af68; color: #e0af68; font-weight: 600;
+  }
+  #topbar select {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 6px; font-size: 13px; max-width: 170px;
+  }
+  button, label.btn {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 10px; font-size: 13px; cursor: pointer;
+  }
+  button:hover, label.btn:hover { border-color: var(--accent); }
+  #toolbar { display: flex; gap: 4px; margin-left: 8px; }
+  #toolbar button.active { background: var(--accent); color: #101115; border-color: var(--accent); }
+  #status { color: var(--dim); font-size: 12px; margin-left: auto; }
+  #main { flex: 1; display: flex; min-height: 0; }
+  #layers, #right {
+    width: 230px; flex: none; overflow-y: auto;
+    background: var(--panel);
+    padding: 6px;
+  }
+  #layers { border-right: 1px solid var(--border); }
+  #right { border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+  #bonelist { overflow-y: auto; max-height: 45%; }
+  h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--dim); margin: 8px 6px 4px; font-weight: 600;
+  }
+  .layer, .bone {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 6px; border-radius: 6px; cursor: pointer;
+  }
+  .layer:hover, .bone:hover { background: #262a33; }
+  .layer.selected, .bone.selected { background: var(--accent); color: #101115; }
+  .layer .eye { cursor: pointer; opacity: 0.8; width: 18px; text-align: center; flex: none; }
+  .layer .lname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .layer .tag { font-size: 10px; opacity: 0.6; flex: none; }
+  .layer .ord {
+    flex: none; width: 14px; text-align: center; font-size: 9px;
+    opacity: 0; cursor: pointer;
+  }
+  .layer:hover .ord { opacity: 0.55; }
+  .layer .ord:hover { opacity: 1; color: var(--accent); }
+  .layer.selected .ord:hover { color: #101115; }
+  .layer.hidden-layer { opacity: 0.45; }
+  .layer.selected .tag { opacity: 0.8; }
+  #props { padding: 4px; border-top: 1px solid var(--border); margin-top: 8px; }
+  #props .prop { display: flex; align-items: center; gap: 8px; margin: 4px 6px; }
+  #props .prop span { color: var(--dim); width: 46px; flex: none; }
+  #props select { flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 2px; }
+  #props button { margin: 6px; }
+  .dim { color: var(--dim); font-size: 12px; margin: 6px; line-height: 1.6; }
+  #stagewrap { flex: 1; position: relative; min-width: 0; }
+  #stage {
+    width: 100%; height: 100%; display: block;
+    background: repeating-conic-gradient(#1c1f26 0% 25%, #22262e 0% 50%) 0 0 / 28px 28px;
+  }
+  #drop {
+    position: absolute; inset: 0; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(22,24,29,0.85); color: var(--accent);
+    font-size: 18px; pointer-events: none;
+  }
+  /* ---- timeline ---- */
+  #timeline { border-top: 1px solid var(--border); background: var(--panel); flex: none; }
+  #tl-toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; }
+  #tl-toolbar .sep { flex: none; width: 1px; height: 18px; background: var(--border); }
+  #modebtn.animating { background: #f7768e; border-color: #f7768e; color: #101115; }
+  #playbtn { min-width: 34px; }
+  #timelabel { color: var(--dim); font-size: 12px; min-width: 110px; }
+  #tl-toolbar input[type=number] {
+    width: 52px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px; padding: 2px 4px;
+  }
+  #tl-toolbar select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 2px; }
+  #tl-resize {
+    height: 6px; cursor: ns-resize; margin-bottom: -3px;
+    position: relative; z-index: 10;
+  }
+  #tl-resize:hover, #tl-resize.dragging { background: var(--accent); opacity: 0.5; }
+  #tl-body { display: none; height: 150px; }
+  #tl-body.open { display: flex; }
+  #tl-scroll { flex: 1; overflow: auto; position: relative; }
+  #tl-inner { position: relative; min-width: 100%; }
+  #tl-ruler {
+    height: 22px; position: sticky; top: 0; z-index: 6;
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    cursor: ew-resize;
+  }
+  .tl-corner {
+    position: sticky; left: 0; display: inline-block;
+    width: 140px; height: 100%; background: var(--panel); z-index: 2;
+  }
+  .tick { position: absolute; top: 0; height: 100%; color: var(--dim); font-size: 10px; border-left: 1px solid var(--border); padding-left: 3px; pointer-events: none; }
+  .tick.minor { height: 40%; top: 60%; border-left: 1px solid #262a33; }
+  .tl-row { display: flex; height: 22px; border-bottom: 1px solid #23262e; }
+  .tl-rowlabel {
+    position: sticky; left: 0; width: 140px; flex: none; z-index: 4;
+    background: var(--panel); border-right: 1px solid var(--border);
+    line-height: 21px; padding: 0 8px; font-size: 12px; color: var(--dim);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    box-sizing: border-box; cursor: pointer;
+  }
+  .tl-rowlabel.selected { color: var(--accent); }
+  .tl-row.expanded { background: rgba(224, 175, 104, 0.05); }
+  .tl-row.expanded .tl-rowlabel { background: #272b34; }
+  .tl-arrow { cursor: pointer; margin-right: 4px; opacity: 0.7; }
+  .tl-arrow:hover { opacity: 1; color: var(--accent); }
+  .tl-sublabel { padding-left: 26px; font-size: 11px; opacity: 0.75; }
+  .key.subkey { width: 9px; height: 9px; top: 6px; margin-left: -4.5px; }
+  .tl-track { position: relative; flex: 1; }
+  .tl-evrow { background: rgba(224, 175, 104, 0.06); }
+  .tl-evrow .tl-rowlabel { color: #e0af68; }
+  .evt {
+    position: absolute; top: 2px; height: 17px; line-height: 16px;
+    padding: 0 7px 0 4px; font-size: 10px; color: #101115;
+    background: #e0af68; border-radius: 2px 9px 9px 2px;
+    cursor: pointer; white-space: nowrap; user-select: none;
+  }
+  .evt::before { content: '⚑'; margin-right: 3px; }
+  .evt.selected { background: var(--accent); }
+  .eye.keyed { color: #e0af68; text-shadow: 0 0 4px #e0af68; }
+  .vlabel { font-style: italic; opacity: 0.85; }
+  .vkey {
+    position: absolute; top: 6px; width: 10px; height: 10px;
+    margin-left: -5px; cursor: pointer; box-sizing: border-box;
+    border: 2px solid #9ece6a; background: transparent; border-radius: 2px;
+  }
+  .vkey.on { background: #9ece6a; }
+  .vkey.selected { border-color: #fff; }
+  .tkey {
+    position: absolute; top: 5px; width: 11px; height: 11px;
+    margin-left: -5.5px; cursor: pointer; box-sizing: border-box;
+    border: 2px solid #bb9af7; border-radius: 50%;
+  }
+  .tkey.selected { border-color: #fff; }
+  #props input[type=color] { width: 40px; height: 24px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: none; cursor: pointer; }
+  #props input[type=range] { accent-color: var(--accent); }
+  .key {
+    position: absolute; top: 5px; width: 11px; height: 11px;
+    background: #e0af68; transform: rotate(45deg); margin-left: -5.5px;
+    cursor: pointer; border: 2px solid #e0af68; border-radius: 2px;
+    box-sizing: border-box;
+  }
+  .key.linear { background: transparent; border-color: #c0caf5; }
+  .key.stepped {
+    transform: none; border-radius: 0; top: 6px; width: 10px; height: 10px;
+    background: #7aa2f7; border-color: #7aa2f7; margin-left: -5px;
+  }
+  .key.selected { background: var(--accent); border-color: #fff; }
+  .key.msel, .vkey.msel, .tkey.msel { border-color: #fff; box-shadow: 0 0 0 1.5px rgba(122, 162, 247, .8); }
+  .evt.msel { box-shadow: 0 0 0 1.5px #7aa2f7; }
+  #tl-marquee {
+    position: absolute; z-index: 4; pointer-events: none;
+    border: 1px dashed #7aa2f7; background: rgba(122, 162, 247, .12);
+  }
+  #curvebar button.active {
+    border-color: var(--accent); color: var(--accent); font-weight: 600;
+  }
+  #tl-playhead {
+    position: absolute; top: 0; bottom: 0; width: 1.5px;
+    background: #f7768e; pointer-events: none; z-index: 3;
+  }
+  #tl-playhead::before {
+    content: ''; position: absolute; top: 0; left: -5px;
+    border: 6px solid transparent; border-top-color: #f7768e;
+  }
+  #curvebar { display: flex; gap: 4px; margin-left: 4px; }
+  #curvebar button { padding: 2px 8px; font-size: 11px; }
+  #empty {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px;
+    color: var(--dim); pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <div id="topbar">
+    <h1>NomadOS Rig Animator <span id="projlabel"></span></h1>
+    <select id="projsel" title="Open project"><option value="">— projects —</option></select>
+    <button id="projnew" title="Create a new project">New</button>
+    <button id="projsave" title="Save current project">Save</button>
+    <div class="sep" style="width:1px;height:18px;background:var(--border)"></div>
+    <label class="btn">Open .psd / .psb<input id="file" type="file" accept=".psd,.psb" hidden></label>
+    <label class="btn" title="Re-import an edited PSB, keeping bones, bindings and animations">⟳ Refresh<input id="refreshfile" type="file" accept=".psd,.psb" hidden></label>
+    <div id="toolbar">
+      <button data-tool="select" title="Select / pose (V)">V select</button>
+      <button data-tool="bone" title="Create bone (B)">B bone</button>
+      <button data-tool="pivot" title="Move pivot (P)">P pivot</button>
+      <button data-tool="scale" title="Scale bone (S) — drag on a bone, away from its pivot to grow">S scale</button>
+    </div>
+    <button id="exportbtn" style="border-color:var(--accent);color:var(--accent)">Export</button>
+    <span id="status"></span>
+  </div>
+  <div id="main">
+    <div id="layers"><h2>Layers</h2><div id="layerlist"></div></div>
+    <div id="stagewrap">
+      <canvas id="stage"></canvas>
+      <div id="empty"><div>Open a layered .psd/.psb, drop one here,</div><div>or load the test file.</div></div>
+      <div id="drop">drop to open</div>
+    </div>
+    <div id="right">
+      <h2>Bones</h2>
+      <div id="bonelist"></div>
+      <div id="props"></div>
+    </div>
+  </div>
+  <div id="timeline">
+    <div id="tl-resize" title="Drag to resize timeline"></div>
+    <div id="tl-toolbar">
+      <button id="modebtn" title="Toggle animate mode (Tab)">● Animate</button>
+      <div class="sep"></div>
+      <select id="animsel"></select>
+      <button id="animnew" title="New animation">+</button>
+      <button id="animrename" title="Rename animation">✎</button>
+      <button id="animdelete" title="Delete animation">🗑</button>
+      <div class="sep"></div>
+      <button id="playbtn" title="Play/pause (Space)">▶</button>
+      <span id="timelabel"></span>
+      <label style="color:var(--dim);font-size:12px">dur <input id="durinput" type="number" step="0.1" min="0.1"> s</label>
+      <button id="keybtn" title="Key selected bone's pose at playhead (K)">🔑 key</button>
+      <button id="evtbtn" title="Add a named event marker at the playhead (game syncs to these)">⚑ event</button>
+      <div id="curvebar" title="Interpolation leaving the selected key">
+        <button data-curve="ease">ease</button>
+        <button data-curve="linear">linear</button>
+        <button data-curve="stepped">stepped</button>
+      </div>
+      <span class="dim" id="tl-hint" style="margin-left:auto;font-size:11px"></span>
+    </div>
+    <div id="tl-body">
+      <div id="tl-scroll">
+        <div id="tl-inner">
+          <div id="tl-ruler"></div>
+          <div id="tl-tracks"></div>
+          <div id="tl-playhead"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+<script src="ag-psd.js"></script>
+<script src="mini-spine.js"></script>
+<script src="rig.js"></script>
+<script src="exporter.js"></script>
+<script src="editor.js"></script>
+</body>
+</html>
